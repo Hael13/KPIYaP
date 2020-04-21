@@ -36,7 +36,7 @@ plus proc
         cmp bl, 0
         jl err2 
         
-        adc ax, bx
+        add ax, bx
         
         jo per
         
@@ -71,7 +71,7 @@ minus proc
         cmp bl, 0
         jl err3 
         
-        sbb ax, bx
+        sub ax, bx
         
         jo per2
         
@@ -251,7 +251,8 @@ show proc
     
     first:      
     cmp ax, right
-    jg e2  
+    jg e2
+    jo e2  
     cmp si, cx
     jge greater
     cmp [si], ax
