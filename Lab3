@@ -1,0 +1,366 @@
+.model small
+.stack 100h
+.data
+ten dw 10
+min dw -1
+real_size dw 1
+left dw ?
+right dw ?
+array dw 30 DUP(?)
+mes db 8, 8 DUP('$')
+ctrlf db 0Ah, 0Dh, '$'
+slash db '-', '$'   
+error_str db "Perepolnenie$" 
+insert_count db "Insert count: $"
+insert_number db "Insert number: $"
+insert_left db "Insert left: $"
+insert_right db "Insert right: $"
+.code    
+
+plus proc  
+    mov ax, 0    
+    mov bx, 0
+    for2:       
+        mov bl, [si]
+        inc si
+        cmp bl, '$'
+        je no_err2
+        sub bl, 48
+        
+        imul ten
+        
+        jo per
+        
+        cmp bl, 9
+        jg err2
+        cmp bl, 0
+        jl err2 
+        
+        adc ax, bx
+        
+        jo per
+        
+        jmp for2
+    per:
+        mov dx, offset error_str
+        mov ah, 9
+        int 21h
+    err2:
+        mov bx, -1
+    no_err2: 
+ret
+plus endp   
+
+minus proc  
+    mov ax, 0    
+    mov bx, 0   
+    inc si
+    for3:       
+        mov bl, [si]
+        inc si
+        cmp bl, '$'
+        je no_err3
+        sub bl, 48
+        
+        imul ten
+        
+        jo per2
+        
+        cmp bl, 9
+        jg err3
+        cmp bl, 0
+        jl err3 
+        
+        sbb ax, bx
+        
+        jo per2
+        
+        jmp for3
+    per2:
+        mov dx, offset error_str
+        mov ah, 9
+        int 21h
+    err3:
+        mov bx, -1
+    no_err3: 
+ret
+minus endp 
+
+from_word_to_number proc
+    push si  
+    mov bx, 0 
+    mov dx, offset mes
+    mov ah, 0Ah
+    int 21h 
+    mov si, offset mes
+    mov bl, [si+1]       
+    cmp bx, 0
+    je er
+    cmp [bx+si+2], '$'
+    je er
+    mov [bx+si+2], '$'
+    mov ax, 0
+    mov bl, [si+2]  
+    add si, 2
+    cmp bl, '-'
+    je m
+    jne p
+    m:
+        call minus
+        jmp e
+    p:
+        call plus
+        jmp e
+    er:
+        mov bx, -1 
+    e:   
+    pop si
+ret    
+from_word_to_number endp
+
+sort proc
+    push cx   
+    push dx
+    push si
+    mov cx, real_size
+    add cx, cx 
+    add cx, si
+    mov dx, cx   
+    sub cx, 2
+    cycle1:    
+        mov ax, [si]
+        mov di, si
+        add di, 2
+        cycle2:
+            cmp [di], ax
+            jge next
+            xchg [di], ax
+            mov [si], ax
+        next:
+            add di, 2
+            cmp di, dx
+            jl cycle2
+        add si, 2
+        cmp si, cx
+        jl cycle1
+    pop si
+    pop dx           
+    pop cx
+ret                        
+sort endp
+
+reverse proc
+    push si
+    push di
+    swap:
+        mov al, [si]
+        xchg al, [di]
+        mov [si], al
+        inc si
+        dec di
+        cmp si, di
+        jl swap
+    pop di
+    pop si
+ret
+reverse endp
+    
+from_number_to_string proc
+    push ax
+    push di
+    push dx
+    push cx   
+    mov cx, 0
+    cmp ax, 0
+    jge st   
+    mov cx, 1 
+    mov [si], '-'
+    inc si
+    imul min
+    st:
+    push si
+    to_str:  
+        mov dx, 0  
+        idiv ten 
+        
+        add dl, 48
+        mov [si], dl
+        inc si
+        cmp ax, 0
+        jne to_str        
+    end_to_str:
+    mov [si], '$'
+    mov di, si
+    dec di
+    pop si
+    call reverse
+    cmp cx, 0
+    je n
+    dec si
+    n:
+    pop cx 
+    pop dx
+    pop di
+    pop ax
+    ret  
+from_number_to_string endp    
+    
+out_number proc
+    push ax
+    push dx
+    call from_number_to_string
+    mov dx, si
+    mov ah, 9
+    int 21h
+    
+    mov dx, offset slash
+    int 21h
+             
+    pop dx         
+    mov ax, dx 
+    call from_number_to_string
+    mov dx, si
+    mov ah, 9
+    int 21h
+    
+    mov dx, offset ctrlf
+    mov ah, 9
+    int 21h
+    
+    pop ax
+    ret
+out_number endp
+
+show proc
+    pusha
+    
+    mov di, offset mes
+    mov ax, left
+    mov cx, real_size
+    add cx, cx
+    add cx, si   
+    mov dx, 0
+    less:    
+        cmp si, cx
+        jge end_less
+        cmp [si], ax
+        jge end_less
+        add si, 2
+        jmp less
+    end_less:
+    
+    first:      
+    cmp ax, right
+    jg e2  
+    cmp si, cx
+    jge greater
+    cmp [si], ax
+    jg greater
+    je eq
+    
+    greater:    
+        xchg si, di 
+        mov dx, 0
+        call out_number
+        adc ax, 1
+        xchg si, di    
+    end_greater:
+    jmp first 
+    
+    eq:
+    mov dx, 0 
+    equal:    
+        inc dx
+        add si, 2
+        cmp si, cx
+        jge end_equal
+        cmp [si], ax
+        je equal        
+    end_equal:     
+    xchg si, di
+    call out_number
+    xchg si, di  
+    adc ax, 1
+    jmp first
+    
+    e2:
+    popa   
+    ret 
+show endp
+
+start:
+    mov ax, @data
+    mov ds, ax
+    mov es, ax
+    
+    mov dx, offset insert_count
+    mov ah, 9
+    int 21h   
+    
+    call from_word_to_number
+        
+    cmp bx, -1
+    je err 
+    cmp ax, 0
+    jle err
+    mov cx, ax
+    cmp cx, 30
+    jg err 
+    mov real_size, cx
+    
+    mov si, offset array     
+    
+    mov dx, offset ctrlf
+    mov ah, 9
+    int 21h
+       
+    for:
+        
+        mov dx, offset insert_number
+        mov ah, 9
+        int 21h
+               
+        call from_word_to_number
+        
+        cmp bx, -1
+        je err
+        
+        mov [si], ax
+        add si, 2
+        mov dx, offset ctrlf
+        mov ah, 9
+        int 21h 
+        loopnz for
+    call sort
+    
+    mov dx, offset insert_left
+    mov ah, 9
+    int 21h  
+    call from_word_to_number
+    mov left, ax
+    mov dx, offset ctrlf
+    mov ah, 9
+    int 21h    
+    
+    mov dx, offset insert_right
+    mov ah, 9
+    int 21h
+    call from_word_to_number
+    mov right, ax
+    
+    cmp left, ax
+    jg err 
+    
+    mov dx, offset ctrlf
+    mov ah, 9
+    int 21h 
+    
+    mov si, offset array
+    call sort
+    call show 
+    
+    
+    err:    
+    mov ax, 4C00h
+    int 21h
+end start
