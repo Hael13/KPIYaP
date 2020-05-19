@@ -11,7 +11,8 @@ fruit dw 0
 movement dw 4
 eighty dw 80 
 map_size dw 1920
-speed dw 0ffffh
+speed_CX dw 1h
+speed_DX dw 0ffffh
 count dw 0
 str_menu db "1.Play2.Option3.Exit" 
 str_option db "1.Easy2.Medium3.Hard"    
@@ -25,7 +26,8 @@ check_fruit proc
     mov si, offset snake
     for10:          
         cmp [si], dx
-        je end_for10
+        je end_for10 
+        add si, 2
         loopnz for10
     mov ax, 0           
     end_for10:
@@ -247,8 +249,10 @@ switch proc
     
     escp:
         mov ax, -1
+        ret
     no_switch:
         mov ax, movement
+        
     def: 
         mov movement, ax
     ret
@@ -295,7 +299,7 @@ menu proc
     jmp menu
     no_option:
     cmp ah, 04h
-    jne m
+    jne menu
     end_m:
        
     ret
@@ -310,20 +314,24 @@ option proc
     p:
     cmp ah, 02h
     jne no_easy
-    mov ax, 0ffffh
+    mov cx, 02h
+    mov ax, 0h
     jmp end_p
     no_easy:
     cmp ah, 03h
     jne no_medium
-    mov ax, 0eeeeh
+    mov cx, 01h
+    mov ax, 0000h
     jmp end_p                                    
     call option
     no_medium:
     cmp ah, 04h
     jne option 
-    mov ax, 0000h
+    mov cx, 0h
+    mov ax, 0bbbbh
     end_p:
-    mov speed, ax
+    mov speed_CX, cx
+    mov speed_DX, ax
     ret
 option endp 
 
@@ -335,15 +343,18 @@ play proc
     call clear
     call create_snake
     call get_fruit
+    call show_count
     for5:
         mov ah, 86h 
-        mov cx, 01h
-        mov dx, speed
+        mov cx, speed_CX
+        mov dx, speed_DX
         int 15h
         call check
         cmp ax, -1
         je end_for5
         call switch
+        cmp ax, -1
+        je end_for5
         call go
         call move
         call draw_snake
