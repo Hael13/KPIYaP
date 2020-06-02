@@ -1,0 +1,358 @@
+.model small
+.stack 100h
+
+.data
+
+ban_len dw ? 
+str_len dw ?
+
+in_file db 10 DUP(0) 
+out_file db 10 DUP(0) 
+banned db 100 DUP(0) 
+
+in_field dw ?
+out_field dw ?    
+
+buf db 16384 DUP(0)
+
+pos dw 0
+flag db 0
+
+.code    
+
+open proc
+    mov ah, 3Dh
+    mov al, 2
+    mov cl, 00000000b
+    int 21h
+    ret    
+open endp
+
+close proc 
+    mov ah, 3Eh
+    int 21h
+    ret    
+close endp
+
+read proc
+    mov ah, 3Fh
+    mov bx, in_field
+    mov cx, 16384    
+    mov dx, offset buf
+    int 21h
+    ret    
+read endp   
+
+write proc 
+    mov ah, 40h
+    mov bx, out_field    
+    mov dx, si
+    int 21h
+    ret    
+write endp             
+
+get_word proc
+    
+    for1: 
+        mov al, ds:[si]
+        inc si
+        cmp al, ' '
+        jne end_for1
+        dec cx
+        cmp cx, 0
+        jg for1
+    end_for1:  
+    dec si
+    
+    for2:  
+        mov al, ds:[si]
+        inc si
+        cmp al, ' '
+        je end_for2 
+        mov es:[di], al
+        inc di
+        loopnz for2
+    end_for2:
+    
+    mov es:[di], 0
+    
+    ret
+get_word endp
+
+read_cmd proc
+    
+    mov si, 80h
+    mov ch, 0
+    mov cl, ds:[si]
+    sub cx, 2
+    inc si
+    
+    cmp cx, 0
+    je err
+    
+    mov di, offset in_file
+    call get_word
+    
+    cmp cx, 0
+    je err 
+    
+    mov di, offset out_file
+    call get_word  
+    
+    cmp cx, 0
+    je err
+    
+    mov di, offset banned
+    call get_word
+    
+    mov di, offset banned
+    call strlen
+    mov es:ban_len, cx
+    
+    mov di, offset banned
+    call word_lower
+    mov ax, 0
+    ret
+    err:
+    mov ax, -1
+    ret
+read_cmd endp
+
+word_lower proc
+    
+    for10:
+        mov al, es:[di]
+        call get_lower
+        mov es:[di], al
+        inc di  
+        loopnz for10
+    end_for10: 
+    
+    ret
+word_lower endp
+
+strlen proc
+    
+    mov cx, 0
+    mov al, 0
+    for3:
+        inc cx
+        scasb
+        jne for3 
+        
+    dec cx    
+    
+    ret
+strlen endp
+
+get_lower proc
+    
+    cmp al, 'a'
+    jge en1
+    add al, 32
+    
+    en1:
+    ret
+get_lower endp
+
+is_del proc
+    
+    call get_lower
+    cmp al, 'a'
+    jl en2
+    cmp al, 'z'
+    jg en2
+    
+    jmp en3
+    
+    en2:
+    
+    mov al, 0
+    
+    en3:
+    ret
+is_del endp 
+
+skip_del proc
+    
+    for5:
+        lodsb
+        call is_del
+        cmp al, 0
+        jne end_for5
+        cmp si, di
+        jl for5
+        ret
+    end_for5:
+    dec si
+    ret
+skip_del endp
+
+end_string proc
+    mov al, 0Ah
+    mov di, si
+    repne scasb
+    ret
+end_string endp 
+
+word_cmp proc
+    
+    for11:  
+        mov al, [si]
+        mov ah, [di]
+        inc di
+        inc si
+        call get_lower
+        cmp al, ah
+        jne end_for11 
+        dec cx
+        cmp cx, 0
+        jg for11
+    end_for11:
+    
+    ret
+word_cmp endp
+
+analyze_word proc
+    push di
+    mov dx, 0
+    mov di, offset banned
+    mov cx, ban_len
+    call word_cmp
+    jne not_that
+    lodsb
+    call is_del
+    cmp al, 0
+    jne not_that
+    mov dx, -1
+    not_that:
+    dec si
+    pop di
+    ret
+analyze_word endp
+
+next_word proc
+    
+    for6:
+        lodsb
+        call is_del
+        cmp al, 0
+        jne end_for6    
+        cmp si, di
+        jl for6    
+    end_for6:
+    ret
+    
+next_word endp
+
+analyze_string proc
+    push si
+    
+    for7: 
+        call skip_del
+        call analyze_word
+        cmp dx, -1
+        je end_for7
+        call next_word
+        cmp si, di
+        jl for7    
+    end_for7:
+   
+    pop si
+    ret
+analyze_string endp 
+
+start:
+    mov ax, @data
+    mov es, ax
+    call read_cmd 
+    cmp ax, -1
+    je err1
+    mov ax, @data
+    mov ds, ax
+    
+    mov ah, 3Ch
+    mov cl, 10000000b
+    lea dx, out_file 
+    int 21h
+    jc err1
+    
+    lea dx, in_file
+    call open 
+    jc err2
+    mov in_field, ax
+    
+    lea dx, out_file
+    call open
+    jc err2
+    mov out_field, ax
+    
+    for9: 
+        
+        call read
+        mov si, offset buf
+        mov cx, ax
+        cmp ax, 0
+        je end_for9
+        cmp ax, 16384
+        jge for4
+        mov al, 1
+        mov flag, al
+        
+        
+    for4:  
+        ;;;;;;;;;;;;;;;
+        mov dx, cx
+        call end_string
+        je find_end
+        
+        mov al, flag
+        cmp al, 1
+        je find_end
+                              
+        cmp dx, 16384
+        jge find_end 
+        
+        mov ax, 0
+        sub ax, dx
+        mov pos, ax
+        mov ah, 42h     
+        mov al, 1
+        mov bx, in_field
+        mov dx, pos
+        mov cx, 0ffffh
+        int 21h
+        
+        jmp for9 
+        ;;;;;;;;;;;;;;;
+        find_end: 
+        push cx
+        call analyze_string
+        cmp dx, -1
+        je not_write
+        mov cx, di
+        sub cx, si
+        call write
+        not_write:
+        mov si, di
+        pop cx 
+        cmp cx, 0
+        jg for4        
+    end_for4:
+        jmp for9
+    end_for9:  
+    
+    err2:
+    mov bx, in_field
+    call close 
+    
+    mov bx, out_field
+    call close
+    
+    
+    err1:  
+    mov ax, 4C00h
+    int 21h 
+    
+end start
+
